@@ -1,0 +1,26 @@
+using UnityEngine;
+
+public class ObjectPositioning : MonoBehaviour
+{
+    public GameObject head; // Sphere
+    public GameObject body; // Cube
+    public GameObject eyes; // Cylinder
+
+    // Start is called before the first frame update
+    void Start()
+    {
+        // Set the 'head' (sphere) to the camera's position
+        Vector3 camPosition = new Vector3(-0.256925f, 1.620243f, 0.104072f);
+        head.transform.position = camPosition;
+
+        // Set the 'body' (cube) to the object's position
+        Vector3 objectPosition = new Vector3(2.283051f, 2.660883f, -2.7398f);
+        body.transform.position = objectPosition;
+
+        // Calculate a rotation looking at the head position from the current camera position
+        Quaternion lookAtRotation = Quaternion.LookRotation(head.transform.position - camPosition);
+
+        // Apply the calculated lookAt rotation to the 'eyes' (cylinder)
+        eyes.transform.rotation = lookAtRotation;
+    }
+}
