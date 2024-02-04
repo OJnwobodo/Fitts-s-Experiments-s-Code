@@ -1,0 +1,99 @@
+import numpy as np
+import math 
+
+# Values for the camera and object
+cam_pos = np.array([-0.256925, 0.620243, 0.104072])
+euler_angles_deg = np.array([-99.8024052, 0.4601436, 148.5069148]) # Renamed cam_rot_q to euler_angles_deg
+object_pos = np.array([2.98305, 2.66508, -2.7398])
+
+# Convert Euler angles from degrees to radians
+euler_angles_rad = np.radians(euler_angles_deg)
+
+# Function to check leaf conditions
+def check_leaf_conditions(direction, cos_pitch, sin_pitch, cos_yaw, sin_yaw, cos_roll, sin_roll, angle):
+    sqrt2_inv = 1 / np.sqrt(2)
+
+    # Check the conditions for the leaf nodes based on the main direction
+    if direction == 'F':       
+        if cos_pitch > sqrt2_inv:
+            return 'F1 or F2'
+        elif sin_pitch > sqrt2_inv:
+            return 'F3 or F4'
+        elif cos_pitch < -sqrt2_inv:
+            return 'F5'
+        elif sin_pitch < -sqrt2_inv:
+            return 'F6'
+
+    elif direction == 'R':      
+        if cos_pitch > sqrt2_inv:
+            return 'R1 or R2'
+        elif sin_pitch > sqrt2_inv:
+            return 'R3 or R4'
+        elif cos_pitch < -sqrt2_inv:
+            return 'R5'
+        elif sin_pitch < -sqrt2_inv:
+            return 'R6'
+
+    elif direction == 'B':      
+        if cos_pitch > sqrt2_inv:
+            return 'B1 or B2'
+        elif sin_pitch > sqrt2_inv:
+            return 'B3 or B4'
+        elif cos_pitch < -sqrt2_inv:
+            return 'B5'
+        elif sin_pitch < -sqrt2_inv:
+            return 'B6'
+
+    elif direction == 'L':
+        # Check conditions specific to the 'L' direction
+        if cos_pitch > sqrt2_inv:
+            return 'L1 or L2'
+        elif sin_pitch > sqrt2_inv:
+            return 'L3 or L4'
+        elif cos_pitch < -sqrt2_inv:
+            return 'L5'
+        elif sin_pitch < -sqrt2_inv:
+            return 'L6'
+
+    return 'Condition not met'
+
+def check_conditions(cos_pitch, sin_pitch, cos_yaw, sin_yaw, cos_roll, sin_roll, yaw):
+    sqrt2_inv = 1 / np.sqrt(2)
+    
+    direction = None
+    if cos_yaw > sqrt2_inv and -sqrt2_inv < sin_yaw < sqrt2_inv:
+        direction = 'F'
+    elif sin_yaw > sqrt2_inv and -sqrt2_inv < cos_yaw < sqrt2_inv:
+        direction = 'R'
+    elif cos_yaw < -sqrt2_inv and -sqrt2_inv < sin_yaw < sqrt2_inv:
+        direction = 'B'
+    elif sin_yaw < -sqrt2_inv and -sqrt2_inv < cos_yaw < sqrt2_inv:
+        direction = 'L'
+    else:
+        return 'Condition not met', 'Condition not met'
+
+    # Call check_leaf_conditions with the determined direction
+    leaf = check_leaf_conditions(direction, cos_pitch, sin_pitch, cos_yaw, sin_yaw, cos_roll, sin_roll, yaw)
+    return direction, leaf
+
+# Calculate cosine and sine of the Euler angles in radians
+cos_angles_rad = np.cos(euler_angles_rad)
+sin_angles_rad = np.sin(euler_angles_rad)
+
+# Extract the yaw value from the Euler angles
+yaw = euler_angles_rad[2]
+
+# Execute the check_conditions function with the yaw value
+direction, leaf_position = check_conditions(
+    cos_angles_rad[1], sin_angles_rad[1], 
+    cos_angles_rad[2], sin_angles_rad[2], 
+    cos_angles_rad[0], sin_angles_rad[0],
+    yaw
+)
+
+print("Direction:", direction)
+print("Leaf Position:", leaf_position)
+print("Euler Angles (Radians):", euler_angles_rad)
+print("Cosine of Angles:", cos_angles_rad)
+print("Sine of Angles:", sin_angles_rad)
+print("Euler angles from quaternion (degrees):", euler_angles_deg)
