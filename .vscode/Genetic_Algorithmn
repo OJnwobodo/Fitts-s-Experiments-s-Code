@@ -1,0 +1,122 @@
+import pandas as pd
+import numpy as np
+import random
+
+# Reading the data from files
+df_dst = pd.read_csv('Holens_Data.csv')
+df_reference_Data = pd.read_csv('U_feedback.csv')
+
+# List of column names (F1 to B6)
+columns_to_average = ['F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'L1', 'L2', 'L3', 'L4', 'L5', 'L6']
+
+# Calculate and store the average for each specified column
+column_averages = {}
+for column_name in columns_to_average:
+    column_average = df_reference_Data[column_name].mean()
+    column_averages[column_name] = column_average
+    
+# Define the number of participants
+N_Reference_Samples = 13
+N_Hololens_samples = 267
+
+# Create an initial population
+population_size = 50
+population = [[random.uniform(0, 2), random.uniform(0, 1), random.uniform(0, 1), random.uniform(0, 1)] for _ in range(population_size)]  # 4 parameters for Lambda, S, sigma, mu
+
+# Define the dm function
+def dm(dQ_H_T, S, sigma, mu):
+    return S - (S - 1) * np.exp(-0.5 * ((dQ_H_T - mu) / sigma) ** 2)
+
+# Define the LoD function
+def LoD(distance_measure, Lambda, d_S_T, V_T):
+    return np.log2(Lambda * distance_measure * d_S_T / V_T)
+
+def fitness_function(individual):
+    errors = []
+
+    Lambda, S, sigma, mu = individual
+    # Calculate errors for each row in df_dst
+    for index in range(N_Reference_Samples):
+        row_dst = df_dst.iloc[index]
+        distance_measure = dm(row_dst['dQ_H_T'], S, sigma, mu)
+        vn = LoD(distance_measure, Lambda, row_dst['d_S_T'], row_dst['V_T'])
+
+        # Calculate the error for each column using the average values
+        column_errors = [column_averages[column_name] - vn for column_name in columns_to_average]
+
+        # Calculate the MSE for this row and add it to the errors list
+        mse_row = np.mean([error ** 2 for error in column_errors])
+        errors.append(mse_row)
+
+    # The objective function returns the mean of the MSE values for all rows
+    return np.mean(errors)
+
+
+def select_parents(population, scores, num_parents=2):
+   
+    selected_parents = []
+    for _ in range(num_parents):        
+        tournament = random.sample(list(enumerate(scores)), k=3)
+        
+        # Find the individual with the best fitness in the tournament
+        best_individual_index = min(tournament, key=lambda x: x[1])[0]
+        selected_parents.append(population[best_individual_index])
+
+    return selected_parents
+
+
+def crossover(parents):
+    point = random.randint(1, len(parents[0]) - 2)
+    child1 = parents[0][:point] + parents[1][point:]
+    child2 = parents[1][:point] + parents[0][point:]
+    return [child1, child2]
+
+def mutate(child, mutation_rate):
+    for i in range(len(child)):
+        if random.uniform(0, 1) < mutation_rate:
+            child[i] = random.uniform(0, 2)
+    return child
+
+# Genetic Algorithm parameters
+num_generations = 300
+mutation_rate = 0.11
+
+# Lists to store all solutions and their fitness values
+all_solutions = []
+all_fitness_values = []
+
+# Initialize best solution and its fitness value
+best_solution = None
+best_fitness = float('inf')
+
+# Main loop for Genetic Algorithm
+for generation in range(num_generations):
+    scores = [fitness_function(individual) for individual in population]
+    parents = select_parents(population, scores)
+    population = []
+
+    while len(population) < population_size:
+        children = crossover(parents)
+        mutated_children = [mutate(child, mutation_rate) for child in children]
+        population.extend(mutated_children)
+    
+    # Find the best individual of this generation
+    best_individual = min(population, key=fitness_function)
+    best_fitness_current = fitness_function(best_individual)
+    
+    # Append the best individual and its fitness to the lists
+    all_solutions.append(best_individual)
+    all_fitness_values.append(best_fitness_current)
+    
+    # Check if this generation has a better solution
+    if best_fitness_current < best_fitness:
+        best_solution = best_individual
+        best_fitness = best_fitness_current
+
+# Print all solutions and their fitness values
+for i, (solution, fitness) in enumerate(zip(all_solutions, all_fitness_values)):
+    print(f"Generation {i+1}: Solution = {solution}, Fitness = {fitness}")
+
+# Print the best solution found
+print("Best Solution:", best_solution)
+print("Best Fitness:", best_fitness)
