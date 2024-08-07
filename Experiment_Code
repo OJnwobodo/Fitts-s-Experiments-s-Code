@@ -1,0 +1,377 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Text;
+using UnityEngine;
+using UnityEngine.XR;
+using Microsoft.MixedReality.Toolkit.Input;
+using System.Collections;
+using Random = UnityEngine.Random;
+
+public class ObjectPlacement : MonoBehaviour
+{
+    public GameObject SphereObject;
+    public GameObject CubeObject;
+    public GameObject CarObject;
+    public GameObject arrowPrefab;
+    private Vector3 arrowPosition = new Vector3(0.0f, -1.0f, 4.0f);
+    private Vector3 arrowScale = new Vector3(2.0f, 20.0f, 20.0f);
+    private Vector3 cameraPositionAtArrowAppear;
+    private Quaternion cameraRotationAtArrowAppear;
+    private Vector3 cameraPositionAtStart;
+    private Quaternion cameraRotationAtStart;
+    private Vector3 cameraPositionWhenClicked;
+    private Quaternion cameraRotationWhenClicked;
+    private int chosenObjectType;
+    private string objectColor;
+    public Vector3 distortionVector;
+    public float scalingFactor = 1f;
+    private GameObject instantiatedArrow;
+    private GameObject instantiatedObject;
+    private GameObject prefabToInstantiate;
+    private Color initialObjectColor;
+    private Camera mainCamera;
+    private float arrowAppearTime;
+    public float distanceFromCamera = 2f;
+    public float yOffset = 0f;
+    public Transform headTransform;
+    public float minDistance = 0.3f;
+    public float maxDistance = 0.6f;
+    public GameObject thankYouObject;
+    private int vQuadrant;
+    private int hQuadrant;
+    private double alphaHLoD;
+    private double betaVLoD;
+    private float distance;
+    private Vector3 objectPosition;
+    public string userName;
+    public string sampleID;
+    public string sessionID;
+    private Vector3 direction;
+    //  private int collectedSamples = 0;
+
+
+
+    public class MeasurementData
+    {
+        public string SampleID { get; set; }
+        public string SessionID { get; set; }
+        public string UserName { get; set; }
+        public string ObjectType { get; set; }
+        public Matrix4x4 Intrinsic { get; set; }
+        public Matrix4x4 Extrinsic { get; set; }
+        public Vector3 cameraPositionAtStart { get; set; }
+        public Quaternion cameraRotationAtStart { get; set; }
+        public Vector3 cameraPositionWhenClicked { get; set; }
+        public Quaternion cameraRotationWhenClicked { get; set; }
+        public Vector3 objectPosition { get; set; }
+        public Vector3 distortionVector { get; set; }
+        public float scalingFactor { get; set; }
+        public int vQuadrant { get; set; }
+        public int hQuadrant { get; set; }
+        public double alphaHLoD { get; set; }
+        public double betaVLoD { get; set; }
+        public double distance { get; set; }
+        public string Color { get; set; }
+        public float ArrowAppearTime { get; set; }
+        public float ClickTime { get; set; }
+
+    }
+
+    List<MeasurementData> measurements = new List<MeasurementData>();
+    List<string> userNames = new List<string>();
+    void Start()
+    {
+        mainCamera = Camera.main;
+        cameraPositionAtStart = mainCamera.transform.position;
+        cameraRotationAtStart = mainCamera.transform.rotation;
+        arrowCreate();
+        DrawObjectPositions();
+
+        if (thankYouObject != null)
+        {
+            thankYouObject.SetActive(false);
+        }
+    }
+
+    private void arrowCreate()
+    {
+        instantiatedArrow = Instantiate(arrowPrefab, arrowPosition, Quaternion.identity);
+        instantiatedArrow.transform.localScale = arrowScale;
+        instantiatedArrow.SetActive(true);
+        cameraPositionAtArrowAppear = Camera.main.transform.position;
+        cameraRotationAtArrowAppear = Camera.main.transform.rotation;
+        instantiatedArrow.transform.LookAt(Camera.main.transform);
+        arrowAppearTime = Time.realtimeSinceStartup;
+    }
+
+    public void DrawObjectPositions()
+    {
+        
+        hQuadrant = Random.Range(1, 5); 
+        vQuadrant = Random.Range(1, 5);
+
+        // Determine angles based on quadrants
+        alphaHLoD = (Mathf.PI / 2) * (Random.value + (hQuadrant - 1)); 
+        betaVLoD = (Mathf.PI / 2) * (Random.value + (vQuadrant - 1));
+        // Convert spherical to Cartesian coordinates
+        Vector3 direction = new Vector3(
+            Mathf.Cos((float)alphaHLoD) * Mathf.Cos((float)betaVLoD),
+            Mathf.Sin((float)betaVLoD),
+            Mathf.Sin((float)alphaHLoD) * Mathf.Cos((float)betaVLoD)
+        ).normalized;
+        distance = Random.Range(minDistance, maxDistance);
+        objectPosition = mainCamera.transform.position + (direction * distance);
+        int objectType = Random.Range(0, 3);
+
+        prefabToInstantiate = null;
+        switch (objectType)
+        {
+            case 0:
+                prefabToInstantiate = SphereObject;
+                break;
+            case 1:
+                prefabToInstantiate = CubeObject;
+                break;
+            case 2:
+                prefabToInstantiate = CarObject;
+                break;
+        }
+        if (prefabToInstantiate)
+        {
+            instantiatedObject = Instantiate(prefabToInstantiate, objectPosition, Quaternion.identity);
+            distortionVector = new Vector3(Random.Range(0.4f, 0.5f),Random.Range(0.4f, 0.5f),Random.Range(0.4f, 0.5f));
+            scalingFactor = Random.Range(0.3f, 0.5f);
+            Color color = new Color(Random.value, Random.value, Random.value);
+            instantiatedObject.transform.localScale = distortionVector * scalingFactor;
+            instantiatedObject.GetComponent<Renderer>().material.color = color;
+            instantiatedArrow.transform.LookAt(instantiatedObject.transform);
+            SphereCollider collider = instantiatedObject.AddComponent<SphereCollider>();
+            collider.radius = 1.0f;
+        }
+    }
+
+    public void OnInputClicked()
+    {
+        if (instantiatedObject != null)
+        {
+            chosenObjectType = Random.Range(0, 3);
+            ChangeObjectColor();
+            float clickedTime = Time.time;
+            cameraPositionWhenClicked = Camera.main.transform.position;
+            cameraRotationWhenClicked = Camera.main.transform.rotation;
+
+            Debug.Log("User clicked on the object at time: " + clickedTime);
+            Debug.Log("HLoD: " + hQuadrant);
+            Debug.Log("VLoD: " + vQuadrant);
+            Debug.Log("ArrowTime: " + arrowAppearTime);
+            Debug.Log("Hangle: " + alphaHLoD);
+            Debug.Log("Vangle: " + betaVLoD);
+            Debug.Log("Distance: " + distance);
+            Debug.Log("ObjectPosition: " + objectPosition);
+            Debug.Log("CamerapositionAtStart:" + cameraPositionAtStart);
+            Debug.Log("CameraRotationAtStart:" + cameraRotationAtStart);
+            Debug.Log("CamerapositionwhenClicked:" + cameraPositionWhenClicked);
+            Debug.Log("CameraRotationewhenClicked:" + cameraRotationWhenClicked);
+
+            MeasurementData measurement = new MeasurementData
+            {
+               
+                ObjectType = GetObjectTypeString(),
+                Intrinsic = CalculateIntrinsicMatrix(),
+                Extrinsic = CalculateExtrinsicMatrix(),
+                cameraPositionAtStart = cameraPositionAtArrowAppear,
+                cameraRotationAtStart = cameraRotationAtArrowAppear, 
+                cameraPositionWhenClicked = mainCamera.transform.position, 
+                cameraRotationWhenClicked = mainCamera.transform.rotation, 
+                distance = Random.Range(minDistance, maxDistance),
+                objectPosition = mainCamera.transform.position + (direction * distance),
+                distortionVector = new Vector3(Random.Range(0.4f, 0.5f),Random.Range(0.4f, 0.5f),Random.Range(0.4f, 0.5f)),
+                scalingFactor = Random.Range(0.3f, 0.5f),
+                hQuadrant = Random.Range(1, 5),
+                vQuadrant = Random.Range(1, 5),
+                alphaHLoD = (Mathf.PI / 2) * (Random.value + (hQuadrant - 1)),
+                betaVLoD = (Mathf.PI / 2) * (Random.value + (vQuadrant - 1)),
+                ArrowAppearTime = arrowAppearTime,
+                ClickTime = clickedTime,
+                Color = initialObjectColor.ToString(),
+
+            };
+
+            measurements.Add(measurement);
+            SaveObjectData();
+
+            instantiatedObject.SetActive(false);
+            instantiatedArrow.SetActive(false);
+
+            if (thankYouObject != null)
+            {
+                thankYouObject.SetActive(true);
+            }
+            StartCoroutine(PauseAndInstantiateNewObject());
+            //collectedSamples++;
+           // if (collectedSamples >= totalSamplesToCollect)
+           // {
+                
+           // }
+           // else
+           // {
+
+            //}
+       }
+    }
+    private IEnumerator PauseAndInstantiateNewObject()
+    {
+        yield return new WaitForSeconds(2.0f);
+        if (thankYouObject != null)
+        {
+            thankYouObject.SetActive(false);
+        }
+        arrowCreate();
+        DrawObjectPositions();
+    }
+    private void SaveObjectData()
+    {
+        string directoryPath = Path.Combine(Application.persistentDataPath, "userName");
+        Directory.CreateDirectory(directoryPath);
+
+        // Generate a timestamp for the filenames
+        string timeStamp = System.DateTime.Now.ToString("yyyyMMddHHmmssfff");
+        string intrinsicFileName = "intrinsic_data_" + timeStamp + ".csv";
+        string extrinsicFileName = "extrinsic_data_" + timeStamp + ".csv";
+        string remainingFileName = "remaining_data_" + timeStamp + ".csv";
+
+        // Define the full paths to the CSV files
+        string intrinsicSavePath = Path.Combine(directoryPath, intrinsicFileName);
+        string extrinsicSavePath = Path.Combine(directoryPath, extrinsicFileName);
+        string remainingSavePath = Path.Combine(directoryPath, remainingFileName);
+
+        // Create StringBuilder objects for each CSV file
+        StringBuilder intrinsicCsvBuilder = new StringBuilder();
+        StringBuilder extrinsicCsvBuilder = new StringBuilder();
+        StringBuilder remainingCsvBuilder = new StringBuilder();
+
+        // Add CSV headers (column names) for each file
+        intrinsicCsvBuilder.AppendLine("Intrinsic");
+        extrinsicCsvBuilder.AppendLine("Extrinsic");
+        remainingCsvBuilder.AppendLine("ObjectType,cameraPositionAtStart,,,cameraRotationAtStart,,,,cameraPositionWhenClicked,,,cameraRotationWhenClicked,,,,distance,objectPosition,,,distortionVector,,,scalingFactor,hQuadrant,vQuadrant,alphaHLoD,betaVLoD,ArrowAppearTime,ClickTime,Color");
+
+        // Iterate through the collected object data and append it to the respective CSV builders
+        foreach (var data in measurements)
+        {
+            // Format the data as a CSV line for each type
+            string intrinsicCsvLine = Matrix4x4ToString(data.Intrinsic);
+            string extrinsicCsvLine = Matrix4x4ToString(data.Extrinsic);
+            string remainingCsvLine = $"{data.ObjectType},{VectorToString(data.cameraPositionAtStart)},{QuaternionToString(data.cameraRotationAtStart)},{VectorToString(data.cameraPositionWhenClicked)},{QuaternionToString(data.cameraRotationWhenClicked)},{data.distance},{VectorToString(data.objectPosition)},{VectorToString(data.distortionVector)},{data.scalingFactor},{(int)data.hQuadrant},{(int)data.vQuadrant},{data.alphaHLoD},{data.betaVLoD},{data.ArrowAppearTime},{data.ClickTime},{data.Color}";
+
+
+            // Append data to respective CSV builders
+            intrinsicCsvBuilder.AppendLine(intrinsicCsvLine);
+            extrinsicCsvBuilder.AppendLine(extrinsicCsvLine);
+            remainingCsvBuilder.AppendLine(remainingCsvLine);
+        }
+
+        // Write the CSV data to files
+        File.WriteAllText(intrinsicSavePath, intrinsicCsvBuilder.ToString());
+        File.WriteAllText(extrinsicSavePath, extrinsicCsvBuilder.ToString());
+        File.WriteAllText(remainingSavePath, remainingCsvBuilder.ToString());
+    }
+
+
+    public void ChangeObjectColor()
+    {
+        // Generate a new random color
+        Color newColor = new Color(Random.value, Random.value, Random.value);
+
+        // Change the color of the instantiated object
+        instantiatedObject.GetComponent<Renderer>().material.color = newColor;
+
+        // Update the initial object color
+        initialObjectColor = newColor;
+    }
+
+    private string Matrix4x4ToString(Matrix4x4 matrix)
+    {
+        // Convert the Matrix4x4 to a string representation
+        string matrixString = string.Empty;
+        for (int row = 0; row < 4; row++)
+        {
+            for (int col = 0; col < 4; col++)
+            {
+                matrixString += matrix[row, col].ToString("F4") + " ";
+            }
+            matrixString += "\n";
+        }
+        return matrixString;
+    }
+
+    private string GetObjectTypeString()
+    {
+        if (chosenObjectType == 0) return "S";
+        if (chosenObjectType == 1) return "C";
+        if (chosenObjectType == 2) return "M";
+        return "-";
+    }
+
+    private Matrix4x4 CalculateExtrinsicMatrix()
+    {
+        // Calculate the extrinsic matrix based on the estimated camera pose
+        Vector3 cameraPosition = Camera.main.transform.position;
+        Quaternion cameraRotation = Camera.main.transform.rotation;
+        Matrix4x4 extrinsicMatrix = Matrix4x4.TRS(cameraPosition, cameraRotation, Vector3.one);
+
+        return extrinsicMatrix;
+    }
+
+    private Matrix4x4 CalculateIntrinsicMatrix()
+    {
+        float focalLength = Camera.main.fieldOfView;
+        float aspect = Camera.main.aspect;
+        float sensorWidth = Camera.main.sensorSize.x;
+        Matrix4x4 intrinsicMatrix = Matrix4x4.identity;
+        intrinsicMatrix[0, 0] = focalLength / aspect;
+        intrinsicMatrix[1, 1] = focalLength;
+        intrinsicMatrix[0, 2] = Camera.main.pixelWidth / 2.0f;
+        intrinsicMatrix[1, 2] = Camera.main.pixelHeight / 2.0f;
+
+        return intrinsicMatrix;
+
+    }
+
+    private static string VectorToString(Vector3 vector)
+    {
+
+        return $"{vector.x:G},{vector.y:G},{vector.z:G}";
+    }
+
+    private static string QuaternionToString(Quaternion quaternion)
+    {
+        return $"{quaternion.x},{quaternion.y},{quaternion.z},{quaternion.w}";
+    }
+
+    private string ColorToString(Color color)
+    {
+        return $"{color.r:F5},{color.g:F5},{color.b:F5},{color.a:F5}";
+    }
+
+
+    void Update()
+    {
+        if (thankYouObject != null)
+        {
+            thankYouObject.transform.parent = mainCamera.transform;
+            thankYouObject.transform.localRotation = Quaternion.identity;
+
+        }
+        if (instantiatedArrow != null && instantiatedObject != null)
+        {
+            Vector3 cameraPosition = mainCamera.transform.position;
+            Quaternion cameraRotation = mainCamera.transform.rotation;
+            instantiatedArrow.transform.position = cameraPosition + cameraRotation * arrowPosition;
+            Vector3 directionToObject = instantiatedObject.transform.position - instantiatedArrow.transform.position;
+            Quaternion arrowRotation = Quaternion.LookRotation(directionToObject, Vector3.up);
+            instantiatedArrow.transform.rotation = arrowRotation;
+
+        }
+    }
+}
